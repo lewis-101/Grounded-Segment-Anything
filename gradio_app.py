@@ -16,7 +16,8 @@ from GroundingDINO.groundingdino.util.slconfig import SLConfig
 from GroundingDINO.groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
 
 # segment anything
-from segment_anything import build_sam, SamPredictor 
+from segment_anything.segment_anything import build_sam, SamPredictor
+
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,6 +30,9 @@ import torch
 from io import BytesIO
 from diffusers import StableDiffusionInpaintPipeline
 from huggingface_hub import hf_hub_download
+
+import sys
+sys.path.append("G://Image_Decomposition//Grounded-Segment-Anything//segment_anything//segment_anything")
 
 def load_model_hf(model_config_path, repo_id, filename, device='cpu'):
     args = SLConfig.fromfile(model_config_path) 

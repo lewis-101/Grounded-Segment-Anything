@@ -22,7 +22,8 @@ import torch
 import torch.utils.checkpoint as checkpoint
 from torch import Tensor, nn
 
-from groundingdino.util.misc import inverse_sigmoid
+# from groundingdino.util.misc import inverse_sigmoid
+from ...util.misc import inverse_sigmoid
 
 from .fuse_modules import BiAttentionBlock
 from .ms_deform_attn import MultiScaleDeformableAttention as MSDeformAttn

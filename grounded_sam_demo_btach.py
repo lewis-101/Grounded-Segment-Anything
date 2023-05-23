@@ -82,11 +82,12 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold, w
 
     return boxes_filt, pred_phrases
 
+
 def show_mask(mask, ax, random_color=False):
     if random_color:
         color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
     else:
-        color = np.array([30/255, 144/255, 255/255, 0.6])
+        color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     ax.imshow(mask_image)
@@ -95,7 +96,7 @@ def show_mask(mask, ax, random_color=False):
 def show_box(box, ax, label):
     x0, y0 = box[0], box[1]
     w, h = box[2] - box[0], box[3] - box[1]
-    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0,0,0,0), lw=2)) 
+    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0, 0, 0, 0), lw=2))
     ax.text(x0, y0, label)
 
 
@@ -117,7 +118,7 @@ def save_mask_data(output_dir, mask_list, box_list, label_list):
     for label, box in zip(label_list, box_list):
         value += 1
         name, logit = label.split('(')
-        logit = logit[:-1] # the last is ')'
+        logit = logit[:-1]  # the last is ')'
         json_data.append({
             'value': value,
             'label': name,
@@ -126,7 +127,7 @@ def save_mask_data(output_dir, mask_list, box_list, label_list):
         })
     with open(os.path.join(output_dir, 'mask.json'), 'w') as f:
         json.dump(json_data, f)
-    
+
 
 if __name__ == "__main__":
 
@@ -138,7 +139,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sam_checkpoint", type=str, required=True, help="path to checkpoint file"
     )
-    parser.add_argument("--input_image", type=str, required=True, help="path to image file")
+    parser.add_argument("--input_image", type=str, help="path to image file")
     parser.add_argument("--text_prompt", type=str, required=True, help="text prompt")
     parser.add_argument(
         "--output_dir", "-o", type=str, default="outputs", required=True, help="output directory"
@@ -148,6 +149,7 @@ if __name__ == "__main__":
     parser.add_argument("--text_threshold", type=float, default=0.25, help="text threshold")
 
     parser.add_argument("--device", type=str, default="cuda", help="running on cpu only!, default=False")
+    parser.add_argument("--path", type=str, required=True, help="running on cpu only!, default=False")
     args = parser.parse_args()
 
     # cfg
@@ -160,58 +162,86 @@ if __name__ == "__main__":
     box_threshold = args.box_threshold
     text_threshold = args.box_threshold
     device = args.device
+    path = args.path
 
     # make dir
     os.makedirs(output_dir, exist_ok=True)
-    # load image
-    image_pil, image = load_image(image_path)
+
     # load model
     model = load_model(config_file, grounded_checkpoint, device=device)
-
-    # visualize raw image
-    image_pil.save(os.path.join(output_dir, "raw_image.jpg"))
-
-    # run grounding dino model
-    boxes_filt, pred_phrases = get_grounding_output(
-        model, image, text_prompt, box_threshold, text_threshold, device=device
-    )
-
-    # initialize SAM
     predictor = SamPredictor(build_sam(checkpoint=sam_checkpoint))
-    image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    predictor.set_image(image)
+    # load image
+    for root, dirs, img_list in os.walk(path):
+        print(img_list)
+    for files in img_list:
+        filename_last = files.rsplit('.', 1)[0]
+        last_char = filename_last[-1]
+        # 单保存原图 1图
+        if last_char == "1":
+            output_dir_tmp = output_dir + "/" + filename_last[0:-1] + "2"
+            # make dir
+            os.makedirs(output_dir_tmp, exist_ok=True)
+            # load image
+            image_path = path + "/" + files
+            image_pil, image = load_image(image_path)
+            image_pil.save(os.path.join(output_dir_tmp, "raw_image.jpg"))
+        # 做分割 2图 伽马变换好做分割
+        if last_char == "2":
+            output_dir_tmp = output_dir + "/" + filename_last
+            # make dir
+            os.makedirs(output_dir_tmp, exist_ok=True)
+            # load image
+            image_path = path + "/" + files
+            image_pil, image = load_image(image_path)
 
-    size = image_pil.size
-    H, W = size[1], size[0]
-    for i in range(boxes_filt.size(0)):
-        boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
-        boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
-        boxes_filt[i][2:] += boxes_filt[i][:2]
+            # visualize raw image
+            # image_pil.save(os.path.join(output_dir_tmp, "raw_image.jpg"))
 
-    boxes_filt = boxes_filt.cpu()
-    transformed_boxes = predictor.transform.apply_boxes_torch(boxes_filt, image.shape[:2])
+            # run grounding dino model
+            boxes_filt, pred_phrases = get_grounding_output(
+                model, image, text_prompt, box_threshold, text_threshold, device=device
+            )
 
-    masks, _, _ = predictor.predict_torch(
-        point_coords = None,
-        point_labels = None,
-        boxes = transformed_boxes,
-        multimask_output = False,
-    )
-    
-    # draw output image
-    plt.figure(figsize=(10, 10))
-    plt.imshow(image)
-    for mask in masks:
-        show_mask(mask.cpu().numpy(), plt.gca(), random_color=True)
-    for box, label in zip(boxes_filt, pred_phrases):
-        show_box(box.numpy(), plt.gca(), label)
+            # initialize SAM
+            # predictor = SamPredictor(build_sam(checkpoint=sam_checkpoint))
+            image = cv2.imread(image_path) #gai
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            predictor.set_image(image)
 
-    plt.axis('off')
-    plt.savefig(
-        os.path.join(output_dir, "grounded_sam_output.jpg"), 
-        bbox_inches="tight", dpi=300, pad_inches=0.0
-    )
+            size = image_pil.size
+            H, W = size[1], size[0]
+            for i in range(boxes_filt.size(0)):
+                boxes_filt[i] = boxes_filt[i] * torch.Tensor([W, H, W, H])
+                boxes_filt[i][:2] -= boxes_filt[i][2:] / 2
+                boxes_filt[i][2:] += boxes_filt[i][:2]
 
-    save_mask_data(output_dir, masks, boxes_filt, pred_phrases)
+            boxes_filt = boxes_filt.cpu()
+            transformed_boxes = predictor.transform.apply_boxes_torch(boxes_filt, image.shape[:2])
+            # 做了个异常跳过
+            try:
+                masks, _, _ = predictor.predict_torch(
+                    point_coords=None,
+                    point_labels=None,
+                    boxes=transformed_boxes,
+                    multimask_output=False,
+                )
+            except RuntimeError:
+                # 发生异常时执行的代码
+                print("发生了异常，跳过当前循环")
+                continue
 
+            # draw output image
+            plt.figure(figsize=(10, 10))
+            plt.imshow(image)
+            for mask in masks:
+                show_mask(mask.cpu().numpy(), plt.gca(), random_color=True)
+            for box, label in zip(boxes_filt, pred_phrases):
+                show_box(box.numpy(), plt.gca(), label)
+
+            plt.axis('off')
+            plt.savefig(
+                os.path.join(output_dir_tmp, "grounded_sam_output.jpg"),
+                bbox_inches="tight", dpi=300, pad_inches=0.0
+            )
+
+            save_mask_data(output_dir_tmp, masks, boxes_filt, pred_phrases)

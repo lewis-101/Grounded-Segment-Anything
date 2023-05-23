@@ -141,7 +141,15 @@ class MaskDecoder(nn.Module):
             hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
         hyper_in = torch.stack(hyper_in_list, dim=1)
         b, c, h, w = upscaled_embedding.shape
-        masks = (hyper_in @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        # 原
+        # masks = (hyper_in @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
+        new_shape = (b, -1, h, w)
+        upscaled_embedding_reshaped = upscaled_embedding.view(b, c, h * w)
+        if upscaled_embedding_reshaped.numel() == 0:
+            # handle empty tensor case
+            upscaled_embedding_reshaped = upscaled_embedding_reshaped.view(b, c, 1)
+            new_shape = (b, c, 1, 1)
+        masks = (hyper_in @ upscaled_embedding_reshaped).view(*new_shape)
 
         # Generate mask quality predictions
         iou_pred = self.iou_prediction_head(iou_token_out)
